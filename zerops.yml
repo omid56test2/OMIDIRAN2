@@ -1,0 +1,11 @@
+
+zerops:
+  - setup: docker
+    run:
+      base: docker@latest
+      prepareCommands:
+        - docker image pull ghcr.io/amirh00sain/spiderpanel:v1
+      start: docker run --network=host ghcr.io/amirh00sain/spiderpanel:v1
+      ports:
+        - port: 8080
+          httpSupport: true
