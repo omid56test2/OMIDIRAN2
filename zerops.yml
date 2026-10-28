@@ -1,11 +1,10 @@
-
 zerops:
-  - setup: docker
+  - setup: app
     run:
       base: docker@latest
       prepareCommands:
-        - docker image pull ghcr.io/amirh00sain/spiderpanel:v1
-      start: docker run --network=host ghcr.io/amirh00sain/spiderpanel:v1
+        - docker image pull ghcr.io/omid56test2/omidiran2:sha-c799c55
+      start: docker run --network=host -e XUI_PORT=8080 ghcr.io/omid56test2/omidiran2:sha-c799c55
       ports:
         - port: 8080
           httpSupport: true
