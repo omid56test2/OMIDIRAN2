@@ -6,5 +6,5 @@ zerops:
         - docker image pull ghcr.io/omid56test2/omidiran2:sha-c799c55
       start: docker run --network=host ghcr.io/omid56test2/omidiran2:sha-c799c55
       ports:
-        - port: 8080
+        - port: 8000
           httpSupport: true
