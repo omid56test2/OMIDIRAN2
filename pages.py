@@ -140,7 +140,7 @@ __LOGIN_CSS__
 <div class="scan"></div><div class="shell">
   <div class="hud"><span class="kicker">OMID-01 / SECURE ACCESS GATE</span><div style="display:flex;gap:6px"><button class="lang" id="lang-login" type="button">EN</button><button class="lang" id="theme-login" type="button">☼</button></div></div>
   <div class="card">
-    <div class="brand"><div class="brand-img"><img src="data:image/png;base64,__LOGO_B64__" alt="OMID"></div><div><div class="brand-name">OMID-IRAN PANEL</div><div class="brand-sub">Free For All · v2.0.0</div></div></div>
+    <div class="brand"><div class="brand-img"><img src="data:image/png;base64,__LOGO_B64__" alt="OMID"></div><div><div class="brand-name">OMID-IRAN PANEL</div><div class="brand-sub">Free For All · v3.0.0</div></div></div>
     <h1>Sign in to <span class="accent">OMID-IRAN PANEL</span></h1>
     <p class="sub">Enter your credentials to access the control panel</p>
     <div class="err" id="err"><i class="ti ti-alert-circle"></i><span id="err-text"></span></div>
@@ -151,7 +151,7 @@ __LOGIN_CSS__
     </form>
     <div class="meta-grid"><div class="meta"><span>NETWORK</span><b>OMID Network</b></div><div class="meta"><span>STATUS</span><b class="ok">● SYSTEM ONLINE</b></div></div>
     <div style="margin-top:10px;text-align:center;font-size:8.5px;color:var(--t3)">First run default: <b style="color:var(--accent)">omid / omid</b> · Support: <a href="https://t.me/omid_gamingORG" target="_blank" style="color:var(--accent-2);text-decoration:none">@omid_gamingORG</a></div>
-    <div class="foot"><span>Free For All</span><span>OMID-IRAN PANEL · v2.0.0</span></div>
+    <div class="foot"><span>Free For All</span><span>OMID-IRAN PANEL · v3.0.0</span></div>
   </div>
 </div>
 <script>
@@ -454,7 +454,7 @@ __DASHBOARD_CSS__
 <div class="mob-top">
   <div class="ml">
     <div class="mob-logo"><img src="data:image/png;base64,__LOGO_B64__" alt="OMID"></div>
-    <div class="mob-brand-copy"><span class="mob-title">OMID-IRAN PANEL</span><span class="mob-subtitle">Free For All · v2.0.0</span></div>
+    <div class="mob-brand-copy"><span class="mob-title">OMID-IRAN PANEL</span><span class="mob-subtitle">Free For All · v3.0.0</span></div>
   </div>
   <div class="mob-right">
     <span class="top-status"><span class="dot dg pulse"></span> SYSTEM ONLINE</span>
@@ -468,7 +468,7 @@ __DASHBOARD_CSS__
   <button class="sb-close" id="close-sb"><i class="ti ti-x"></i></button>
   <div class="logo">
     <div class="logo-img"><img src="data:image/png;base64,__LOGO_B64__" alt="OMID"></div>
-    <div><div class="logo-name">OMID-IRAN PANEL</div><div class="logo-sub">Free For All · v2.0.0</div><div class="logo-meta">OMID NETWORK NODE</div></div>
+    <div><div class="logo-name">OMID-IRAN PANEL</div><div class="logo-sub">Free For All · v3.0.0</div><div class="logo-meta">OMID NETWORK NODE</div></div>
   </div>
   <div class="side-telemetry">
     <div class="telemetry-head"><span>CORE TELEMETRY</span><span class="telemetry-led"></span></div>
@@ -604,7 +604,7 @@ __DASHBOARD_CSS__
   </div>
   </div>
   <div class="dash-footer">
-    <span class="df-text">OMID-IRAN PANEL v2.0.0 · OMID Network</span>
+    <span class="df-text">OMID-IRAN PANEL v3.0.0 · OMID Network</span>
     
     
   </div>
@@ -891,16 +891,54 @@ __DASHBOARD_CSS__
   </div>
 </section>
 <section class="pg" id="pg-logs">
-  <div class="topbar"><div><div class="tb-title"><i class="ti ti-history"></i> Logs</div><div class="tb-sub">Panel activity history and error log</div></div><div class="tb-right"><button class="btn btn-p btn-sm" onclick="loadActivity();loadErrs()"><i class="ti ti-refresh"></i> Refresh</button></div></div>
+  <style>
+    .lg2-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:12px}
+    .lg2-stat{background:var(--surface);border:1px solid var(--card-b);border-radius:12px;padding:10px 14px;display:flex;flex-direction:column;gap:2px}
+    .lg2-stat b{font-size:22px;line-height:1.2;color:var(--t1);font-weight:700}
+    .lg2-stat span{font-size:11px;color:var(--t3)}
+    .lg2-stat.warn b{color:var(--amber-t)} .lg2-stat.err b{color:var(--red-t)} .lg2-stat.ok b{color:var(--green-t)}
+    .lg2-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+    .lg2-search{flex:1 1 220px;display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--card-b);border-radius:10px;padding:0 12px;color:var(--t3)}
+    .lg2-search input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--t1);padding:9px 0;font:inherit;font-size:13px}
+    .lg2-chips{display:flex;flex-wrap:wrap;gap:6px}
+    .lg2-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--card-b);background:var(--surface);color:var(--t2);border-radius:999px;padding:5px 11px;font-size:12px;cursor:pointer;font-family:inherit}
+    .lg2-chip:hover{color:var(--t1)}
+    .lg2-chip.on{background:var(--info-soft);border-color:var(--info);color:var(--t1)}
+    .lg2-chip i{font-style:normal;font-size:11px;opacity:.7}
+    .lg2-card{padding:6px 14px 10px}
+    .lg2-day{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--t3);padding:14px 2px 6px;font-weight:600}
+    .lg2-row{display:flex;gap:11px;padding:9px 2px;border-bottom:1px solid var(--hairline,var(--card-b));align-items:flex-start}
+    .lg2-row:last-child{border-bottom:0}
+    .lg2-ic{flex:0 0 26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;background:var(--info-soft);color:var(--info)}
+    .lg2-ic.ok{background:var(--green-bg);color:var(--green-t)} .lg2-ic.warn{background:var(--amber-bg);color:var(--amber-t)} .lg2-ic.err{background:var(--red-bg);color:var(--red-t)}
+    .lg2-body{flex:1;min-width:0}
+    .lg2-msg{font-size:13px;color:var(--t1);line-height:1.5;word-break:break-word}
+    .lg2-msg.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
+    .lg2-meta{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:11px;color:var(--t3);margin-top:3px;align-items:center}
+    .lg2-tag{border:1px solid var(--card-b);border-radius:6px;padding:0 6px;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--t2)}
+    .lg2-cnt{display:inline-block;margin-inline-start:8px;padding:0 7px;border-radius:999px;font-size:11px;font-weight:700;background:var(--info-soft);color:var(--info);vertical-align:middle}
+    .lg2-cnt.hot{background:var(--amber-bg);color:var(--amber-t)}
+    .lg2-empty{display:flex;align-items:center;justify-content:center;gap:8px;padding:34px 10px;color:var(--t3);font-size:13px}
+    .lg2-empty.ok{color:var(--green-t)}
+    .lg2-more{text-align:center;color:var(--t3);font-size:12px;padding:10px}
+  </style>
+  <div class="topbar"><div><div class="tb-title"><i class="ti ti-history"></i> Logs</div><div class="tb-sub">Panel activity history and error log</div></div><div class="tb-right"><button class="btn btn-sm" onclick="lgClear()"><i class="ti ti-trash"></i> <span id="lg2-clear-label">Clear</span></button> <button class="btn btn-p btn-sm" onclick="loadActivity();loadErrs()"><i class="ti ti-refresh"></i> Refresh</button></div></div>
   <div class="tabbar" data-tabgroup="lg">
     <button class="tab-btn on" data-tab="activity" onclick="pgTab('lg','activity')"><i class="ti ti-history"></i> Activity</button>
     <button class="tab-btn" data-tab="errors" onclick="pgTab('lg','errors')"><i class="ti ti-alert-triangle"></i> Errors <span class="badge bg-red" id="errs-badge">0</span></button>
   </div>
   <div class="tabpane on" data-tabgroup="lg" data-tab="activity">
-  <div class="card"><div class="log-timeline" id="logs-list">—</div><div class="empty" id="logs-empty" style="display:none"><i class="ti ti-history-toggle"></i><p>No activity logs yet</p></div></div>
+    <div class="lg2-stats" id="lg2-stats"></div>
+    <div class="lg2-bar">
+      <label class="lg2-search"><i class="ti ti-search"></i><input id="lg2-q" type="search" autocomplete="off" oninput="lgSetQ(this.value)"></label>
+      <div class="lg2-chips" id="lg2-chips"></div>
+    </div>
+    <div class="card lg2-card"><div id="logs-list">—</div></div>
   </div>
   <div class="tabpane" data-tabgroup="lg" data-tab="errors">
-  <div class="card"><div class="card-title"><i class="ti ti-bug"></i> Error Logs</div><div id="errs-full">—</div></div>
+    <div class="lg2-stats" id="lg2-estats"></div>
+    <div class="lg2-bar"><div class="lg2-chips" id="lg2-echips"></div></div>
+    <div class="card lg2-card"><div id="errs-full">—</div></div>
   </div>
 </section>
 <section class="pg" id="pg-telegram">
@@ -1031,7 +1069,7 @@ __DASHBOARD_CSS__
       </div>
       <div class="srv-tiles">
         <div class="srv-tile"><div class="srv-tile-icon"><i class="ti ti-route"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Default port</div><div class="srv-tile-val">443 (TLS) · configurable per configuration</div></div></div>
-        <div class="srv-tile"><div class="srv-tile-icon"><i class="ti ti-versions"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Version</div><div class="srv-tile-val">v2.0.0</div></div></div>
+        <div class="srv-tile"><div class="srv-tile-icon"><i class="ti ti-versions"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Version</div><div class="srv-tile-val">v3.0.0</div></div></div>
         <div class="srv-tile"><div class="srv-tile-icon"><i class="ti ti-bolt"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Framework</div><div class="srv-tile-val">FastAPI + Uvicorn</div></div></div>
         <div class="srv-tile"><div class="srv-tile-icon"><i class="ti ti-device-floppy"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Storage</div><div class="srv-tile-val">JSON File (/data)</div></div></div>
         <div class="srv-tile" style="grid-column:1/-1">
@@ -1461,7 +1499,7 @@ async function fetchStats(){
     document.getElementById('m-alinks').textContent=d.active_links??'—';
     document.getElementById('m-lsub').textContent='of '+d.links_count+' configurations';
     document.getElementById('m-subs').textContent=d.subs_count??'—';
-    document.getElementById('errs-badge').textContent=d.total_errors+' errors';
+    document.getElementById('errs-badge').textContent=(d.unique_errors!==undefined?d.unique_errors:d.total_errors);
     document.getElementById('uptime-inline').textContent=d.uptime;
     document.getElementById('uptime-badge').textContent='OMIDIRAN · '+d.uptime;
     document.getElementById('last-upd').textContent='Last update: '+new Date().toLocaleTimeString('en-US');
@@ -1476,43 +1514,175 @@ async function fetchStats(){
       [ch1,ch3].forEach(c=>{if(!c)return;c.data.labels=labels;c.data.datasets[0].data=vals;c.update()});
       if(vals.length){const avg=vals.reduce((a,b)=>a+b,0)/vals.length,peak=Math.max(...vals);document.getElementById('t-avg').innerHTML=avg.toFixed(2)+'<span class="m-unit">MB</span>';document.getElementById('t-peak').innerHTML=peak.toFixed(2)+'<span class="m-unit">MB</span>';}
     }
-    renderErrs(d.recent_errors||[]);
   }catch(e){console.error(e)}
 }
-function renderErrs(errs){
-  const el=document.getElementById('errs-full');if(!el)return;
-  if(!errs.length){el.innerHTML='<div style="color:var(--green-t);padding:10px;font-size:12px;display:flex;align-items:center;gap:5px"><i class="ti ti-circle-check"></i> No errors</div>';return}
-  el.innerHTML=errs.slice().reverse().map(e=>`<div class="erow"><div class="etime"><i class="ti ti-clock"></i>${new Date(e.time).toLocaleString('fa-IR')}</div><div class="emsg">${esc(e.error)}${e.url?' — '+esc(e.url):''}</div></div>`).join('');
+/* ═════════ LOGS PAGE (grouped / filterable) ═════════ */
+const LG_T={
+  en:{search:'Search logs…',all:'All',connection:'Connections',link:'Configs',sub:'Groups',auth:'Sign in',system:'System',
+      events:'Events',connections:'Connections',warnings:'Warnings',errors:'Errors',uniq:'Unique errors',occ:'Total occurrences',
+      today:'Today',yesterday:'Yesterday',first:'first',last:'last',times:'times',none:'No activity logs yet',noMatch:'Nothing matches your filter',
+      noErr:'No errors',clear:'Clear',cActs:'Clear all activity logs?',cErrs:'Clear all error logs?',more:'older entries hidden — use search to narrow down',
+      eAll:'All',eErr:'Errors',eWarn:'Warnings',repeated:'Repeated'},
+  fa:{search:'جستجو در لاگ‌ها…',all:'همه',connection:'اتصال‌ها',link:'کانفیگ‌ها',sub:'گروه‌ها',auth:'ورود',system:'سیستم',
+      events:'رویدادها',connections:'اتصال‌ها',warnings:'هشدارها',errors:'خطاها',uniq:'خطاهای یکتا',occ:'کل دفعات رخداد',
+      today:'امروز',yesterday:'دیروز',first:'اولین',last:'آخرین',times:'بار',none:'هنوز لاگی ثبت نشده',noMatch:'موردی با این فیلتر پیدا نشد',
+      noErr:'خطایی وجود ندارد',clear:'پاک‌سازی',cActs:'همه‌ی لاگ‌های فعالیت پاک شوند؟',cErrs:'همه‌ی لاگ‌های خطا پاک شوند؟',more:'ورودی‌های قدیمی‌تر پنهان شدند — از جستجو استفاده کنید',
+      eAll:'همه',eErr:'خطاها',eWarn:'هشدارها',repeated:'تکراری'}
+};
+function lgt(k){const d=LG_T[uiLang]||LG_T.en;return d[k]!==undefined?d[k]:(LG_T.en[k]||k)}
+let lgData=[],lgKind='all',lgQ='',lgErrs=[],lgELevel='all';
+const LG_FA=[
+  [/^Server started$/,'سرور راه‌اندازی شد'],
+  [/^Failed login attempt from (.+)$/,'تلاش ورود ناموفق از $1'],
+  [/^Successful panel login from (.+)$/,'ورود موفق به پنل از $1'],
+  [/^Panel credentials changed: (.+)$/,'اطلاعات ورود پنل تغییر کرد: $1'],
+  [/^Panel password changed$/,'رمز عبور پنل تغییر کرد'],
+  [/^Config "(.+?)" created$/,'کانفیگ «$1» ساخته شد'],
+  [/^Config "(.+?)" deleted$/,'کانفیگ «$1» حذف شد'],
+  [/^Config "(.+?)" enabled$/,'کانفیگ «$1» فعال شد'],
+  [/^Config "(.+?)" disabled$/,'کانفیگ «$1» غیرفعال شد'],
+  [/^Config "(.+?)" updated: (.+)$/,'کانفیگ «$1» ویرایش شد: $2'],
+  [/^Config "(.+?)" updated$/,'کانفیگ «$1» ویرایش شد'],
+  [/^Config "(.+?)" usage reset$/,'مصرف کانفیگ «$1» ریست شد'],
+  [/^Config "(.+?)" added to group$/,'کانفیگ «$1» به گروه اضافه شد'],
+  [/^Config "(.+?)" removed from group$/,'کانفیگ «$1» از گروه خارج شد'],
+  [/^Sub Token for config "(.+?)" set: (.+)$/,'Sub Token کانفیگ «$1» تنظیم شد: $2'],
+  [/^Group "(.+?)" created$/,'گروه «$1» ساخته شد'],
+  [/^Group "(.+?)" deleted$/,'گروه «$1» حذف شد'],
+  [/^Telegram bot enabled(?: \(@(.+)\))?$/,function(m,u){return 'ربات تلگرام فعال شد'+(u?' (@'+u+')':'')}],
+  [/^Telegram bot disabled(?: \(@(.+)\))?$/,function(m,u){return 'ربات تلگرام غیرفعال شد'+(u?' (@'+u+')':'')}],
+  [/^Telegram bot stopped$/,'ربات تلگرام متوقف شد']
+];
+function lgMsg(raw){
+  const m=cleanLogText(raw);
+  if(uiLang==='en')return translateLogMessage(raw,'en');
+  for(let i=0;i<LG_FA.length;i++){if(LG_FA[i][0].test(m))return m.replace(LG_FA[i][0],LG_FA[i][1])}
+  return String(raw||'');  /* keep ZWNJ of untouched Persian text */
 }
+const LG_ICON={ok:'ti-circle-check',err:'ti-circle-x',warn:'ti-alert-triangle',info:'ti-info-circle'};
+const LG_MAX_ROWS=300;
+function lgLoc(){return uiLang==='en'?'en-US':'fa-IR'}
+function lgAgo(iso){
+  const s=Math.max(0,(Date.now()-new Date(iso).getTime())/1000);
+  let rtf;try{rtf=new Intl.RelativeTimeFormat(uiLang==='en'?'en':'fa',{numeric:'auto'})}catch(e){return ''}
+  if(s<60)return rtf.format(0,'second');
+  if(s<3600)return rtf.format(-Math.floor(s/60),'minute');
+  if(s<86400)return rtf.format(-Math.floor(s/3600),'hour');
+  return rtf.format(-Math.floor(s/86400),'day');
+}
+function lgDay(iso){
+  const d=new Date(iso),n=new Date();
+  const k=x=>x.getFullYear()*10000+x.getMonth()*100+x.getDate();
+  const y=new Date(n);y.setDate(n.getDate()-1);
+  if(k(d)===k(n))return lgt('today');
+  if(k(d)===k(y))return lgt('yesterday');
+  return d.toLocaleDateString(lgLoc(),{year:'numeric',month:'long',day:'numeric'});
+}
+function lgApplyLang(){
+  const q=document.getElementById('lg2-q');if(q)q.placeholder=lgt('search');
+  const c=document.getElementById('lg2-clear-label');if(c)c.textContent=lgt('clear');
+}
+function lgChip(label,count,on,fn){
+  return `<button class="lg2-chip${on?' on':''}" onclick="${fn}">${esc(label)}${count!==null?` <i>${count}</i>`:''}</button>`;
+}
+function lgStat(val,label,cls){return `<div class="lg2-stat ${cls||''}"><b>${val}</b><span>${esc(label)}</span></div>`}
+function lgSetQ(v){lgQ=(v||'').trim().toLowerCase();renderActivity()}
+function lgSetKind(k){lgKind=k;renderActivity()}
+function lgSetELevel(l){lgELevel=l;renderErrs()}
+
 async function loadActivity(){
   try{
     const r=await authF('/api/activity'),d=await r.json();
-    const logs=(d.logs||[]).slice().reverse();
-    const el=document.getElementById('logs-list'),em=document.getElementById('logs-empty');
-    if(!logs.length){el.innerHTML='';em.style.display='block';return}
-    em.style.display='none';
-    const icMap={ok:'ti-circle-check',err:'ti-circle-x',warn:'ti-alert-triangle',info:'ti-info-circle'};
-    const kindFa={link:'Configurations',sub:'Group',auth:'Sign In',connection:'Connect',system:'SYSTEM'};
-    const kindEn={link:'CONFIG',sub:'GROUP',auth:'AUTH',connection:'CONNECTION',system:'SYSTEM'};
-    el.innerHTML=logs.map(l=>{
-      /* ← اینجا لاگ رو ترجمه می‌کنیم */
-      const msg = uiLang==='en'
-        ? translateLogMessage(l.message, 'en')
-        : l.message;
-      const kindLabel = uiLang==='en'
-        ? (kindEn[l.kind] || l.kind)
-        : (kindFa[l.kind] || l.kind);
-      const dt = new Date(l.time).toLocaleString(uiLang==='en' ? 'en-US' : 'fa-IR');
-      return `
-      <div class="log-item">
-        <div class="log-ic ${l.level}"><i class="ti ${icMap[l.level]||'ti-info-circle'}"></i></div>
-        <div class="log-body">
-          <div class="log-msg">${esc(msg)}</div>
-          <div class="log-time"><i class="ti ti-clock"></i> ${dt} <span class="log-kind">${kindLabel}</span></div>
-        </div>
-      </div>`;
-    }).join('');
+    lgData=(d.logs||[]).slice().reverse();
+    renderActivity();
   }catch(e){console.error(e)}
+}
+function renderActivity(){
+  lgApplyLang();
+  const el=document.getElementById('logs-list');if(!el)return;
+  const kindFa={link:lgt('link'),sub:lgt('sub'),auth:lgt('auth'),connection:lgt('connection'),system:lgt('system')};
+  const msgOf=l=>lgMsg(l.message);
+
+  /* stats + chips are computed on the whole data set, not the filtered one */
+  const kc={};let conn=0,warn=0,err=0;
+  lgData.forEach(l=>{kc[l.kind]=(kc[l.kind]||0)+1;if(l.kind==='connection')conn+=(l.count||1);if(l.level==='warn')warn++;if(l.level==='err')err++;});
+  document.getElementById('lg2-stats').innerHTML=
+    lgStat(lgData.length,lgt('events'))+lgStat(conn,lgt('connections'))+lgStat(warn,lgt('warnings'),warn?'warn':'')+lgStat(err,lgt('errors'),err?'err':'');
+  const kinds=['connection','link','sub','auth','system'].filter(k=>kc[k]);
+  document.getElementById('lg2-chips').innerHTML=
+    lgChip(lgt('all'),lgData.length,lgKind==='all',"lgSetKind('all')")+
+    kinds.map(k=>lgChip(kindFa[k]||k,kc[k],lgKind===k,`lgSetKind('${k}')`)).join('');
+
+  let rows=lgData.filter(l=>lgKind==='all'||l.kind===lgKind);
+  if(lgQ)rows=rows.filter(l=>(msgOf(l)+' '+((l.meta&&l.meta.ip)||'')+' '+((l.meta&&l.meta.label)||'')).toLowerCase().includes(lgQ));
+  if(!rows.length){
+    el.innerHTML=`<div class="lg2-empty"><i class="ti ti-history-toggle"></i> ${esc(lgData.length?lgt('noMatch'):lgt('none'))}</div>`;return;
+  }
+  const hidden=Math.max(0,rows.length-LG_MAX_ROWS);rows=rows.slice(0,LG_MAX_ROWS);
+  let out='',day='';
+  rows.forEach(l=>{
+    const dl=lgDay(l.time);
+    if(dl!==day){day=dl;out+=`<div class="lg2-day">${esc(dl)}</div>`}
+    const cnt=l.count||1;
+    const t=new Date(l.time).toLocaleTimeString(lgLoc(),{hour:'2-digit',minute:'2-digit'});
+    const full=new Date(l.time).toLocaleString(lgLoc());
+    const firstTxt=cnt>1&&l.first_time?` · ${esc(lgt('first'))}: ${esc(new Date(l.first_time).toLocaleString(lgLoc()))}`:'';
+    out+=`<div class="lg2-row">
+      <div class="lg2-ic ${esc(l.level)}"><i class="ti ${LG_ICON[l.level]||LG_ICON.info}"></i></div>
+      <div class="lg2-body">
+        <div class="lg2-msg">${esc(msgOf(l))}${cnt>1?`<span class="lg2-cnt${cnt>=20?' hot':''}" title="${esc(lgt('repeated'))}">×${cnt}</span>`:''}</div>
+        <div class="lg2-meta"><span class="lg2-tag">${esc(kindFa[l.kind]||l.kind)}</span><span title="${esc(full)}">${esc(t)} · ${esc(lgAgo(l.time))}</span>${firstTxt?`<span>${firstTxt.slice(3)}</span>`:''}</div>
+      </div></div>`;
+  });
+  if(hidden)out+=`<div class="lg2-more">+${hidden} ${esc(lgt('more'))}</div>`;
+  el.innerHTML=out;
+}
+
+async function loadErrs(){
+  try{
+    const r=await authF('/api/errors'),d=await r.json();
+    lgErrs=(d.errors||[]).slice().reverse();
+    const b=document.getElementById('errs-badge');if(b)b.textContent=lgErrs.length;
+    renderErrs();
+  }catch(e){console.error(e)}
+}
+function lgSrc(t){
+  t=String(t||'app').toLowerCase();
+  for(const k of ['vless','vmess','trojan','xhttp'])if(t.indexOf(k)>=0)return k.toUpperCase();
+  return t==='app'?'APP':t.toUpperCase();
+}
+function renderErrs(){
+  lgApplyLang();
+  const el=document.getElementById('errs-full');if(!el)return;
+  const nErr=lgErrs.filter(e=>e.level==='error').length,nWarn=lgErrs.length-nErr;
+  const occ=lgErrs.reduce((a,e)=>a+(e.count||1),0);
+  const st=document.getElementById('lg2-estats');
+  if(st)st.innerHTML=lgStat(lgErrs.length,lgt('uniq'),lgErrs.length?'err':'ok')+lgStat(occ,lgt('occ'))+lgStat(nErr,lgt('errors'),nErr?'err':'')+lgStat(nWarn,lgt('warnings'),nWarn?'warn':'');
+  const ch=document.getElementById('lg2-echips');
+  if(ch)ch.innerHTML=lgChip(lgt('eAll'),lgErrs.length,lgELevel==='all',"lgSetELevel('all')")+lgChip(lgt('eErr'),nErr,lgELevel==='error',"lgSetELevel('error')")+lgChip(lgt('eWarn'),nWarn,lgELevel==='warn',"lgSetELevel('warn')");
+  const rows=lgErrs.filter(e=>lgELevel==='all'||e.level===lgELevel);
+  if(!rows.length){
+    el.innerHTML=lgErrs.length?`<div class="lg2-empty"><i class="ti ti-filter-off"></i> ${esc(lgt('noMatch'))}</div>`
+      :`<div class="lg2-empty ok"><i class="ti ti-circle-check"></i> ${esc(lgt('noErr'))}</div>`;
+    return;
+  }
+  el.innerHTML=rows.map(e=>{
+    const cnt=e.count||1,lvl=e.level==='error'?'err':'warn';
+    const full=new Date(e.time).toLocaleString(lgLoc());
+    return `<div class="lg2-row">
+      <div class="lg2-ic ${lvl}"><i class="ti ${LG_ICON[lvl]}"></i></div>
+      <div class="lg2-body">
+        <div class="lg2-msg mono">${esc(e.error)}${e.url?' — '+esc(e.url):''}${cnt>1?`<span class="lg2-cnt${cnt>=20?' hot':''}" title="${esc(lgt('repeated'))}">×${cnt}</span>`:''}</div>
+        <div class="lg2-meta"><span class="lg2-tag">${esc(lgSrc(e.type))}</span><span title="${esc(full)}">${esc(lgt('last'))}: ${esc(lgAgo(e.time))}</span>${cnt>1&&e.first_time?`<span>${esc(lgt('first'))}: ${esc(new Date(e.first_time).toLocaleString(lgLoc()))}</span>`:''}</div>
+      </div></div>`;
+  }).join('');
+}
+async function lgClear(){
+  const b=document.querySelector('.tabbar[data-tabgroup="lg"] .tab-btn.on');
+  const errs=b&&b.dataset.tab==='errors';
+  if(!confirm(errs?lgt('cErrs'):lgt('cActs')))return;
+  try{await authF(errs?'/api/errors/clear':'/api/activity/clear',{method:'POST'});}catch(e){console.error(e)}
+  if(errs){await loadErrs();try{fetchStats()}catch(e){}}else await loadActivity();
 }
 let allSubsList=[],allLinksList=[];
 async function loadLinks(){
@@ -1987,7 +2157,6 @@ async function loadConns(){
     }).join('');
   }catch(e){console.error(e)}
 }
-async function loadErrs(){try{const r=await authF('/stats'),d=await r.json();renderErrs(d.recent_errors||[]);}catch(e){}}
 async function fetchDefaultVless(){
   try{const r=await authF('/api/links'),d=await r.json();const links=d.links||[];const def=links.find(l=>l.limit_bytes===0&&l.active&&!l.expired)||links.find(l=>l.active&&!l.expired)||links[0];document.getElementById('vless-main').textContent=def?def.vless_link:'No configurations yet';}catch(e){}
 }
@@ -3535,7 +3704,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
     if(document.getElementById('pg-subgroups').classList.contains('on'))loadSubs();
     if(document.getElementById('pg-subgroups').classList.contains('on'))loadSubsPage();
     if(document.getElementById('pg-connections').classList.contains('on'))loadConns();
-    if(document.getElementById('pg-logs').classList.contains('on'))loadActivity();
+    if(document.getElementById('pg-logs').classList.contains('on')){loadActivity();loadErrs();}
   },5000);
 });
 /* ═══════════════════════════════════════════════════════════════════════
@@ -3560,6 +3729,10 @@ const LOG_PATTERNS_RAW = [
   ['^تلاش ورود ناموفق از (.+)$',                     'Failed login attempt from $1'],
   ['^اطلاعات ورود پنل تغییر کرد: (.+)$',             'Panel credentials changed: $1'],
   ['^رمز عبور پنل تغییر کرد$',                        'Panel password changed'],
+
+  /* ── Connection ── */
+  ['^اتصال جدید از (.+?) \\(کانفیگ (.+)\\)$',                'New connection from $1 (config $2)'],
+  ['^اتصال (.+?) به کانفیگ «(.+)» رد شد \\(محدودیت تعداد آی‌پی\\)$', 'Connection from $1 to config "$2" rejected (IP limit reached)'],
 
   /* ── Config (link) ── */
   ['^کانفیگ «(.+?)» ساخته شد$',                       'Configuration "$1" created'],

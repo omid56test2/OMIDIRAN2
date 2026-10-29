@@ -765,7 +765,7 @@ async def _vmess_ws_to_udp(ws: WebSocket, transport: asyncio.DatagramTransport, 
             data = msg.get("bytes") or (msg.get("text") or "").encode()
             if not data:
                 continue
-            if not await check_and_use(uid, len(data)):
+            if not await check_and_use(uid, len(data), "up"):
                 await ws.close(code=1008, reason="quota/disabled/unknown")
                 break
             await throttle(uid, len(data))
@@ -794,7 +794,7 @@ async def _vmess_udp_to_ws(ws: WebSocket, queue: asyncio.Queue, conn_id: str, ui
             data, _addr = await queue.get()
             if data is None:
                 break
-            if not await check_and_use(uid, len(data)):
+            if not await check_and_use(uid, len(data), "down"):
                 await ws.close(code=1008, reason="quota/disabled/unknown")
                 break
             await throttle(uid, len(data))
@@ -829,7 +829,7 @@ async def _vmess_ws_to_tcp(
             if not data:
                 continue
 
-            if not await check_and_use(uid, len(data)):
+            if not await check_and_use(uid, len(data), "up"):
                 await ws.close(code=1008, reason="quota/disabled/unknown")
                 break
 
@@ -878,7 +878,7 @@ async def _vmess_tcp_to_ws(
             if not data:
                 break
 
-            if not await check_and_use(uid, len(data)):
+            if not await check_and_use(uid, len(data), "down"):
                 await ws.close(code=1008, reason="quota/disabled/unknown")
                 break
 
@@ -908,12 +908,12 @@ async def websocket_tunnel_vmess(websocket: WebSocket, uuid: str):
         real_uid, link = main.find_link_by_key(uuid)
 
     if not link or not main.is_link_allowed(link):
-        logger.warning(f"🚫 VMess rejected uuid={uuid[:8]}… (not allowed)")
+        logger.debug(f"🚫 VMess rejected uuid={uuid[:8]}… (not allowed)")
         await websocket.close(code=4000, reason="لینک غیرفعال یا منقضی شده است")
         return
 
     if not main.is_ip_allowed(link, real_uid, ip):
-        logger.warning(f"🚫 VMess rejected uuid={uuid[:8]}… ip={ip} (ip limit)")
+        logger.debug(f"🚫 VMess rejected uuid={uuid[:8]}… ip={ip} (ip limit)")
         await websocket.close(code=4001, reason="محدودیت تعداد آی‌پِی هم‌زمان")
         return
 
@@ -924,7 +924,7 @@ async def websocket_tunnel_vmess(websocket: WebSocket, uuid: str):
         "connected_at": main.now_ir().isoformat(),
         "transport": "vmess-ws",
     }
-    logger.info(
+    logger.debug(
         f"✅ VMess [{conn_id}] uuid={real_uid[:8]}… ip={ip} "
         f"total={len(main.connections)}"
     )
@@ -965,7 +965,7 @@ async def websocket_tunnel_vmess(websocket: WebSocket, uuid: str):
             return
 
         # ── Quota: original websocket frame bytes ──
-        if not await check_and_use(real_uid, len(first_frame)):
+        if not await check_and_use(real_uid, len(first_frame), "up"):
             await websocket.close(code=1008, reason="quota/disabled/unknown")
             return
         main.stats["total_requests"] += 1
@@ -998,7 +998,7 @@ async def websocket_tunnel_vmess(websocket: WebSocket, uuid: str):
 
         if is_udp:
             udp_transport, udp_protocol, udp_queue = await _open_vmess_udp(host, port)
-            logger.info(f"➡️ VMess UDP [{conn_id}] → {host}:{port} sec_type={sec_type}")
+            logger.debug(f"➡️ VMess UDP [{conn_id}] → {host}:{port} sec_type={sec_type}")
             body_init = header_info["body_init"]
             if body_init:
                 for datagram in request_decoder.feed(body_init):
@@ -1024,7 +1024,7 @@ async def websocket_tunnel_vmess(websocket: WebSocket, uuid: str):
                 await websocket.close(code=4003, reason="امکان اتصال به مقصد نیست")
                 return
 
-            logger.info(f"➡️ VMess [{conn_id}] → {host}:{port} sec_type={sec_type}")
+            logger.debug(f"➡️ VMess [{conn_id}] → {host}:{port} sec_type={sec_type}")
             body_init = header_info["body_init"]
             if body_init:
                 for plaintext in request_decoder.feed(body_init):
@@ -1067,11 +1067,6 @@ async def websocket_tunnel_vmess(websocket: WebSocket, uuid: str):
         raise
     except Exception as exc:
         main.stats["total_errors"] += 1
-        main.error_logs.append({
-            "error": str(exc),
-            "type": "vmess_ws_tunnel",
-            "time": main.now_ir().isoformat(),
-        })
         logger.error(f"VMess tunnel error [{conn_id}]: {exc}")
     finally:
         for task in tasks:
@@ -1098,6 +1093,6 @@ async def websocket_tunnel_vmess(websocket: WebSocket, uuid: str):
         except Exception:
             pass
 
-        logger.info(
+        logger.debug(
             f"🔌 VMess closed [{conn_id}] total={len(main.connections)}"
         )

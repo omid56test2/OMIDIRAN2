@@ -154,7 +154,7 @@ def _record_error(exc: Exception, conn_id: str) -> None:
         pass
 
 
-async def _quota_check(uid: str, amount: int) -> bool:
+async def _quota_check(uid: str, amount: int, direction: str = "") -> bool:
     """
     Uses the project's shared quota checker when available.
     This is intentionally lazy so the relay can still be imported/tested alone.
@@ -165,7 +165,7 @@ async def _quota_check(uid: str, amount: int) -> bool:
     try:
         from relay_vless import check_and_use  # type: ignore
 
-        return bool(await check_and_use(uid, amount))
+        return bool(await check_and_use(uid, amount, direction))
     except ImportError:
         return True
     except Exception as exc:
@@ -765,7 +765,7 @@ async def _trojan_tcp_relay(
     initial_payload: bytes,
 ) -> None:
     if initial_payload:
-        if not await _quota_check(uid, len(initial_payload)):
+        if not await _quota_check(uid, len(initial_payload), "up"):
             raise PermissionError("quota exceeded")
 
         await _throttle(uid, len(initial_payload))
@@ -781,7 +781,7 @@ async def _trojan_tcp_relay(
                 if data is None or not data:
                     break
 
-                if not await _quota_check(uid, len(data)):
+                if not await _quota_check(uid, len(data), "up"):
                     await _close_ws(websocket, 1008, "quota/disabled/unknown")
                     return
 
@@ -814,7 +814,7 @@ async def _trojan_tcp_relay(
                 if not data:
                     break
 
-                if not await _quota_check(uid, len(data)):
+                if not await _quota_check(uid, len(data), "down"):
                     await _close_ws(websocket, 1008, "quota/disabled/unknown")
                     return
 
@@ -908,7 +908,7 @@ async def _trojan_udp_relay(
         buffer.extend(tail)
 
         for host, port, payload in records:
-            if not await _quota_check(uid, len(payload)):
+            if not await _quota_check(uid, len(payload), "up"):
                 await _close_ws(websocket, 1008, "quota/disabled/unknown")
                 raise PermissionError("quota exceeded")
 
@@ -954,7 +954,7 @@ async def _trojan_udp_relay(
 
             packet = _udp_record(addr, data)
 
-            if not await _quota_check(uid, len(packet)):
+            if not await _quota_check(uid, len(packet), "down"):
                 await _close_ws(websocket, 1008, "quota/disabled/unknown")
                 return
 
@@ -1013,7 +1013,7 @@ async def _run_trojan(
 
         # Register only after authentication succeeds.
         _register_connection(conn_id, real_uid, client_ip)
-        logger.info(
+        logger.debug(
             "✅ Trojan [%s] uid=%s ip=%s cmd=%s target=%s:%s",
             conn_id,
             real_uid[:8] if real_uid else "?",
@@ -1028,7 +1028,7 @@ async def _run_trojan(
         # We cannot recover its exact frame boundaries here, so account only
         # the parsed request header bytes plus any initial payload handled below.
         header_bytes = request.payload_offset
-        if not await _quota_check(real_uid, header_bytes):
+        if not await _quota_check(real_uid, header_bytes, "up"):
             await _close_ws(websocket, 1008, "quota/disabled/unknown")
             return
         await _throttle(real_uid, header_bytes)
@@ -1084,7 +1084,7 @@ async def _run_trojan(
         )
 
     except PermissionError as exc:
-        logger.warning(
+        logger.debug(
             "🚫 Trojan rejected [%s] ip=%s: %s",
             conn_id,
             client_ip,
@@ -1127,7 +1127,7 @@ async def _run_trojan(
 
         await _close_ws(websocket)
 
-        logger.info(
+        logger.debug(
             "🔌 Trojan closed [%s] ip=%s",
             conn_id,
             client_ip,

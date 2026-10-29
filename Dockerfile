@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════════════
-# OMID-IRAN PANEL v2.0.0 — Production Dockerfile
+# OMID-IRAN PANEL v3.0.0 — Production Dockerfile
 # ══════════════════════════════════════════════════════════════════════════
 # • Base: Python 3.11 Slim
 # • Railway Volume compatible

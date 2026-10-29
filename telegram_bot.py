@@ -1,4 +1,4 @@
-# telegram_bot.py — OMID-IRAN PANEL v2.0
+# telegram_bot.py — OMID-IRAN PANEL v3.0.0
 # ══════════════════════════════════════════════════════════════════════════════
 # ربات مدیریت تلگرام — کامل، حرفه‌ای، همه‌کاره
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1893,7 +1893,8 @@ async def _handle_callback(cb: dict):
         lines = ["📋 <b>آخرین رخدادها:</b>\n"]
         for log in recent:
             t = log.get("time","")[11:16]; lvl = log.get("level","info")
-            lines.append(f"{icons.get(lvl,'•')} <code>{t}</code> {log.get('message','')}")
+            rep = f" ×{log['count']}" if int(log.get("count", 1) or 1) > 1 else ""
+            lines.append(f"{icons.get(lvl,'•')} <code>{t}</code> {log.get('message','')}{rep}")
         await _edit(chat_id, message_id, "\n".join(lines), {"inline_keyboard": [
             [{"text":"🔄","callback_data":"logs"}],[{"text":"⬅ منو","callback_data":"menu"}]]}); return
 

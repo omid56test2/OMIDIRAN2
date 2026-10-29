@@ -359,6 +359,7 @@ Settings
 |---|---|---|
 | `ADMIN_USERNAME` | `omid` | نام کاربری پنل |
 | `ADMIN_PASSWORD` | یک مقدار قوی | رمز پنل |
+| `LOG_LEVEL` | `INFO` (پیش‌فرض) | سطح لاگ کنسول. لاگ‌های هر اتصال به‌صورت پیش‌فرض نمایش داده نمی‌شوند؛ برای دیدن همه‌چیز مقدار `DEBUG` بگذارید |
 | `SECRET_KEY` | مقدار تصادفی طولانی | Secret مربوط به Session و Hash |
 | `DATA_DIR` | `/data` | مسیر State و Secret |
 | `TELEGRAM_BOT_TOKEN` | خالی / Token | توکن ربات تلگرام |

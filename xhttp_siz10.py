@@ -131,10 +131,11 @@ class _QuotaGate:
         اگه کاربر تموم کرده باشه.
     داده هیچ‌وقت نگه داشته نمی‌شه، فقط لحظه‌ی چک‌کردنِ کوتا adaptive هست.
     """
-    __slots__ = ("uuid", "pending", "last_check", "ok", "batch_bytes", "rate_ewma")
+    __slots__ = ("uuid", "direction", "pending", "last_check", "ok", "batch_bytes", "rate_ewma")
 
-    def __init__(self, uuid: str):
+    def __init__(self, uuid: str, direction: str = ""):
         self.uuid = uuid
+        self.direction = direction  # "up" (upload) or "down" (download)
         self.pending = 0
         self.last_check = time.monotonic()
         self.ok = True
@@ -155,14 +156,14 @@ class _QuotaGate:
                 target = int(self.rate_ewma * QUOTA_CHECK_INTERVAL)
                 self.batch_bytes = max(QUOTA_MIN_BATCH, min(QUOTA_MAX_BATCH, target or QUOTA_MIN_BATCH))
             self.last_check = now
-            self.ok = await check_and_use(self.uuid, flush)
+            self.ok = await check_and_use(self.uuid, flush, self.direction)
             return self.ok
         return True
 
     async def flush(self) -> bool:
         if self.pending:
             flush, self.pending = self.pending, 0
-            self.ok = self.ok and await check_and_use(self.uuid, flush)
+            self.ok = self.ok and await check_and_use(self.uuid, flush, self.direction)
         return self.ok
 
 
@@ -252,7 +253,7 @@ async def _get_or_create_session(uuid: str, mode: str, session_id: str, ip: str 
         if not is_link_allowed(link):
             raise HTTPException(status_code=403, detail="not authorized")
         if not is_ip_allowed(link, uuid, ip):
-            logger.warning(f"🚫 XHTTP[{mode}] rejected uuid={uuid[:8]} ip={ip} (ip limit reached)")
+            logger.debug(f"🚫 XHTTP[{mode}] rejected uuid={uuid[:8]} ip={ip} (ip limit reached)")
             raise HTTPException(status_code=403, detail="ip limit reached")
 
         family, transport = _family_for_link(link)
@@ -297,7 +298,7 @@ async def _get_or_create_session(uuid: str, mode: str, session_id: str, ip: str 
             "vmess_udp_queue": None,
         }
         xhttp_sessions[session_id] = sess
-        logger.info(f"new XHTTP[{family}/{mode}] session [{session_id[:8]}] uuid={uuid[:8]} ip={ip}")
+        logger.debug(f"new XHTTP[{family}/{mode}] session [{session_id[:8]}] uuid={uuid[:8]} ip={ip}")
         return sess
 
 
@@ -344,7 +345,7 @@ async def _teardown(session_id: str):
             dq.put_nowait(None)
         except Exception:
             pass
-    logger.info(f"closed XHTTP[{sess.get('family')}/{sess.get('mode')}] [{session_id[:8]}] total={len(xhttp_sessions)}")
+    logger.debug(f"closed XHTTP[{sess.get('family')}/{sess.get('mode')}] [{session_id[:8]}] total={len(xhttp_sessions)}")
 
 
 async def _reaper():
@@ -429,7 +430,7 @@ async def _write_vmess_udp(sess: dict, data: bytes):
 
 
 async def _pump_vmess_udp_to_queue(sess: dict, queue: asyncio.Queue):
-    gate = _QuotaGate(sess["uuid"])
+    gate = _QuotaGate(sess["uuid"], "down")
     delivered = 0
     try:
         while True:
@@ -453,7 +454,7 @@ async def _pump_vmess_udp_to_queue(sess: dict, queue: asyncio.Queue):
         logger.debug("XHTTP VMess UDP downlink closed: %s", exc)
     finally:
         await gate.flush()
-        logger.info(
+        logger.debug(
             "downlink closed XHTTP[vmess/%s] [%s] udp-bytes=%d",
             sess.get("mode"), sess.get("session_id", "?")[:8], delivered
         )
@@ -499,7 +500,7 @@ async def _try_initialize(sess: dict):
         sess["reader"], sess["writer"] = reader, writer
         sess["tcp_open"] = True
         sess["transport_open"] = True
-        logger.info(f"connect XHTTP[vless/{sess['mode']}] [{sess['uuid'][:8]}] -> {address}:{port}")
+        logger.debug(f"connect XHTTP[vless/{sess['mode']}] [{sess['uuid'][:8]}] -> {address}:{port}")
         sess["downlink_task"] = asyncio.create_task(_pump_tcp_to_queue(sess, reader))
         return True, payload
 
@@ -538,7 +539,7 @@ async def _try_initialize(sess: dict):
             sess["downlink_task"] = asyncio.create_task(
                 _pump_vmess_udp_to_queue(sess, udp_queue)
             )
-            logger.info(
+            logger.debug(
                 f"connect XHTTP[vmess/{sess['mode']}/udp] [{sess['uuid'][:8]}] -> {info['host']}:{info['port']}"
             )
             body_init = info.get("body_init") or b""
@@ -551,7 +552,7 @@ async def _try_initialize(sess: dict):
         sess["tcp_open"] = True
         sess["transport_open"] = True
         await sess["down_q"].put(_build_response_header(info))
-        logger.info(f"connect XHTTP[vmess/{sess['mode']}] [{sess['uuid'][:8]}] -> {info['host']}:{info['port']}")
+        logger.debug(f"connect XHTTP[vmess/{sess['mode']}] [{sess['uuid'][:8]}] -> {info['host']}:{info['port']}")
         sess["downlink_task"] = asyncio.create_task(_pump_tcp_to_queue(sess, reader))
         body_init = info.get("body_init") or b""
         if body_init:
@@ -572,7 +573,7 @@ async def _try_initialize(sess: dict):
             sess["reader"], sess["writer"] = reader, writer
             sess["tcp_open"] = True
             sess["transport_open"] = True
-            logger.info(f"connect XHTTP[trojan/{sess['mode']}] [{sess['uuid'][:8]}] -> {req.target_host}:{req.target_port}")
+            logger.debug(f"connect XHTTP[trojan/{sess['mode']}] [{sess['uuid'][:8]}] -> {req.target_host}:{req.target_port}")
             sess["downlink_task"] = asyncio.create_task(_pump_tcp_to_queue(sess, reader))
             return True, buf[req.payload_offset:]
         if req.cmd == 3:
@@ -586,7 +587,7 @@ async def _try_initialize(sess: dict):
             sess["udp_open"] = True
             sess["transport_open"] = True
             sess["udp_task"] = asyncio.create_task(_pump_udp_to_queue(sess, incoming))
-            logger.info(f"open XHTTP[trojan/{sess['mode']}] UDP [{sess['uuid'][:8]}]")
+            logger.debug(f"open XHTTP[trojan/{sess['mode']}] UDP [{sess['uuid'][:8]}]")
             return True, buf[req.payload_offset:]
         raise ValueError("unsupported Trojan command")
 
@@ -677,7 +678,7 @@ async def _pump_tcp_to_queue(sess: dict, reader: asyncio.StreamReader):
     # response advertises SSE via Content-Type, while the actual proxy bytes
     # are forwarded unchanged. VLESS gets its two-byte response header once.
     first_vless = True
-    gate = _QuotaGate(sess["uuid"])
+    gate = _QuotaGate(sess["uuid"], "down")
     delivered = 0
     try:
         while True:
@@ -709,7 +710,7 @@ async def _pump_tcp_to_queue(sess: dict, reader: asyncio.StreamReader):
         logger.debug("XHTTP TCP downlink closed: %s", exc)
     finally:
         await gate.flush()
-        logger.info(
+        logger.debug(
             "downlink closed XHTTP[%s/%s] [%s] bytes=%d",
             sess.get("family"), sess.get("mode"),
             sess.get("session_id", "?")[:8], delivered,
@@ -718,7 +719,7 @@ async def _pump_tcp_to_queue(sess: dict, reader: asyncio.StreamReader):
 
 
 async def _pump_udp_to_queue(sess: dict, incoming: asyncio.Queue):
-    gate = _QuotaGate(sess["uuid"])
+    gate = _QuotaGate(sess["uuid"], "down")
     try:
         while True:
             data, source = await incoming.get()
@@ -782,7 +783,7 @@ async def packet_up_upload(uuid: str, session_id: str, seq: int, request: Reques
     if not body:
         return {"ok": True}
 
-    if not await check_and_use(uuid, len(body)):
+    if not await check_and_use(uuid, len(body), "up"):
         await _teardown(session_id)
         raise HTTPException(status_code=403, detail="quota/disabled/unknown")
     await throttle(uuid, len(body))
@@ -803,7 +804,7 @@ async def packet_up_upload(uuid: str, session_id: str, seq: int, request: Reques
         if sess.get("writer") and sess["writer"].transport.get_write_buffer_size() > PACKET_UP_HIGH_WATER:
             await sess["writer"].drain()
     except Exception as exc:
-        error_logs.append({"error": str(exc), "time": datetime.now().isoformat()})
+        error_logs.append({"error": str(exc), "type": "xhttp", "level": "error"})
         await _teardown(session_id)
         raise HTTPException(status_code=502, detail=f"{sess.get('family', 'xhttp')} write failed")
 
@@ -820,7 +821,7 @@ async def stream_up_upload(uuid: str, session_id: str, request: Request):
 
     gate = sess.get("gate")
     if gate is None:
-        gate = _QuotaGate(uuid)
+        gate = _QuotaGate(uuid, "up")
         sess["gate"] = gate
     flow = sess.get("flow")
     if flow is None:
@@ -844,7 +845,7 @@ async def stream_up_upload(uuid: str, session_id: str, request: Request):
         await _teardown(session_id)
         raise
     except Exception as exc:
-        error_logs.append({"error": str(exc), "time": datetime.now().isoformat()})
+        error_logs.append({"error": str(exc), "type": "xhttp", "level": "error"})
         await gate.flush()
         await _teardown(session_id)
         raise HTTPException(status_code=502, detail=f"{sess.get('family', 'xhttp')} stream error")

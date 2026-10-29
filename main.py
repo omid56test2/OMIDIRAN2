@@ -22,14 +22,105 @@ import uvicorn
 from concurrent.futures import ThreadPoolExecutor
 import httpx
 import logging
+import re
 
 # Fix __main__ vs main circular-import behavior
 import sys as _sys
 if __name__ == "__main__" and "main" not in _sys.modules:
     _sys.modules["main"] = _sys.modules["__main__"]
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+# Console log level. Per-connection chatter (client connected / target opened /
+# socket closed) is logged at DEBUG, so by default the console only shows
+# startup info plus real warnings and errors. Set LOG_LEVEL=DEBUG to see everything.
+_LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").strip().upper()
+logging.basicConfig(
+    level=getattr(logging, _LOG_LEVEL, logging.INFO),
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
 logger = logging.getLogger("OMIDIRAN_PANEL")
+
+_NORM_RE = [
+    (re.compile(r"\[[^\]]{0,40}\]"), "[]"),                                  # [conn_id], [ip]
+    (re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F-]{27}\b"), "<uuid>"),           # full uuid
+    (re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b"), "<ip>"),                    # ipv4
+    (re.compile(r"\b[0-9a-fA-F]{6,}\b"), "<id>"),                             # hex ids
+    (re.compile(r"\d+"), "#"),                                                # numbers / ports
+]
+
+def normalize_log_text(text: str) -> str:
+    """Collapse ids / IPs / numbers so that repeated messages share one key."""
+    t = str(text or "")
+    for rx, rep in _NORM_RE:
+        t = rx.sub(rep, t)
+    return re.sub(r"\s+", " ", t).strip().lower()[:300]
+
+class _RepeatFilter(logging.Filter):
+    """Console: print a repeated WARNING/ERROR once, then summarise how many were hidden."""
+    def __init__(self, window: float = 60.0):
+        super().__init__()
+        self.window = window
+        self.seen: dict = {}
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.levelno < logging.WARNING:
+            return True
+        try:
+            msg = record.getMessage()
+            key = (record.name, record.levelno, normalize_log_text(msg))
+            now = time.monotonic()
+            ent = self.seen.get(key)
+            if ent and now - ent[0] < self.window:
+                ent[1] += 1
+                return False
+            if ent and ent[1]:
+                record.msg = f"{msg}  (+{ent[1]} similar in the last {int(now - ent[0])}s)"
+                record.args = ()
+            self.seen[key] = [now, 0]
+            if len(self.seen) > 500:
+                cutoff = now - self.window
+                self.seen = {k: v for k, v in self.seen.items() if v[0] >= cutoff}
+        except Exception:
+            pass
+        return True
+
+class _UvicornNoiseFilter(logging.Filter):
+    """Hide uvicorn's per-request access lines and per-websocket open/close lines."""
+    _DROP = ("connection open", "connection closed", "[accepted]", "WebSocket /")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.levelno >= logging.WARNING:
+            return True
+        if _LOG_LEVEL == "DEBUG":
+            return True
+        if record.name == "uvicorn.access":
+            try:  # args = (client, method, path, http_version, status_code)
+                return int(record.args[4]) >= 500
+            except Exception:
+                return False
+        msg = record.getMessage()
+        return not any(tok in msg for tok in self._DROP)
+
+def _quiet_third_party_loggers() -> None:
+    # httpx logs one INFO line per outgoing request (Telegram bot polling, server-info
+    # lookups, ...) and the URL can contain the bot token -> keep them off the console.
+    if _LOG_LEVEL == "DEBUG":
+        return
+    for name in ("httpx", "httpcore", "websockets", "websockets.server", "asyncio"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+def _install_console_filters() -> None:
+    _quiet_third_party_loggers()
+    for h in logging.getLogger().handlers:
+        for f in [f for f in h.filters if isinstance(f, _RepeatFilter)]:
+            h.removeFilter(f)
+        h.addFilter(_RepeatFilter())
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        lg = logging.getLogger(name)
+        for f in [f for f in lg.filters if isinstance(f, _UvicornNoiseFilter)]:
+            lg.removeFilter(f)
+        lg.addFilter(_UvicornNoiseFilter())
+
+_install_console_filters()
 
 IRAN_TZ = ZoneInfo("Asia/Tehran")
 
@@ -93,7 +184,7 @@ async def lifespan(app: FastAPI):
     autosave_task = asyncio.create_task(_autosave_loop(), name="omid-state-autosave")
     log_activity("system", "Server started", "ok")
     logger.info(
-        f"OMID-IRAN PANEL v2.0.0 started on port {CONFIG['port']} "
+        f"OMID-IRAN PANEL v3.0.0 started on port {CONFIG['port']} "
         f"| DATA_DIR={DATA_DIR} | STATE_FILE={DATA_FILE}"
     )
 
@@ -344,8 +435,86 @@ stats = {
     "total_errors": 0,
     "start_time": time.time(),
 }
-error_logs: deque = deque(maxlen=50)
-activity_logs: deque = deque(maxlen=200)
+class ErrorLog:
+    """
+    Grouped error store (drop-in for the old deque: .append(dict), iteration, len).
+    Identical errors (after normalising ids / IPs / numbers) are merged into one
+    entry with a counter, first_time and last time, instead of flooding the list.
+    """
+    def __init__(self, maxlen: int = 150):
+        self._items: deque = deque(maxlen=maxlen)
+        self._index: dict = {}
+        self._seq = 0
+
+    def append(self, item: dict) -> None:
+        try:
+            msg = str(item.get("error", ""))[:600]
+            src = str(item.get("type") or item.get("source") or "app")
+            level = str(item.get("level") or "error")
+            now = datetime.now().isoformat()
+            key = (src, normalize_log_text(msg))
+            ent = self._index.get(key)
+            if ent is not None and ent in self._items:
+                ent["count"] += 1
+                ent["time"] = now
+                ent["error"] = msg          # keep the most recent raw text
+                if level == "error":
+                    ent["level"] = "error"
+                self._items.remove(ent)
+                self._items.append(ent)
+                return
+            self._seq += 1
+            ent = {
+                "id": self._seq, "error": msg, "type": src, "level": level,
+                "url": item.get("url"), "count": 1, "first_time": now, "time": now,
+            }
+            self._items.append(ent)
+            self._index[key] = ent
+            if len(self._index) > 600:       # drop index rows whose entry was evicted
+                self._index = {k: v for k, v in self._index.items() if v in self._items}
+        except Exception:
+            pass
+
+    def clear(self) -> None:
+        self._items.clear()
+        self._index.clear()
+
+    def __iter__(self):
+        return iter(list(self._items))
+
+    def __len__(self):
+        return len(self._items)
+
+error_logs = ErrorLog()
+activity_logs: deque = deque(maxlen=500)
+_activity_index: dict = {}
+_activity_seq = 0
+ACTIVITY_DEDUPE_WINDOW = 600            # seconds: identical events are merged
+CONNECTION_LOG_COOLDOWN = 6 * 3600      # seconds: one "connected" entry per IP+config
+
+class _PanelErrorHandler(logging.Handler):
+    """Mirror real WARNING/ERROR records of the app into the panel's Errors tab."""
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            if record.levelno < logging.WARNING:
+                return
+            src = record.name.split(".")[-1].lower()
+            src = "app" if src == "omidiran_panel" else src
+            error_logs.append({
+                "error": record.getMessage(),
+                "type": src,
+                "level": "error" if record.levelno >= logging.ERROR else "warn",
+            })
+        except Exception:
+            pass
+
+def _install_panel_error_handler() -> None:
+    lg = logging.getLogger("OMIDIRAN_PANEL")
+    for h in [h for h in lg.handlers if isinstance(h, _PanelErrorHandler)]:
+        lg.removeHandler(h)
+    lg.addHandler(_PanelErrorHandler(level=logging.WARNING))
+
+_install_panel_error_handler()
 hourly_traffic: dict = defaultdict(int)
 http_client: httpx.AsyncClient | None = None
 LINKS: dict = {}
@@ -423,14 +592,62 @@ SUPPORT_URL = os.environ.get("SUPPORT_URL", "https://t.me/omid_gamingORG").strip
 # Speed limit (0 = unlimited); internal storage uses bytes per second
 DEFAULT_SPEED_LIMIT = 0
 
-def log_activity(kind: str, message: str, level: str = "info"):
-    """Record an activity event such as config changes or authentication."""
-    activity_logs.append({
-        "kind": kind,
-        "level": level,
-        "message": message,
-        "time": datetime.now().isoformat(),
-    })
+def log_activity(kind: str, message: str, level: str = "info", *,
+                 key=None, window: float | None = None, meta: dict | None = None):
+    """
+    Record a panel activity event.
+    Identical events (same key, default = kind+level+message) inside `window`
+    seconds are merged: the existing entry gets count+1 and a fresh timestamp
+    instead of adding another line.
+    """
+    global _activity_seq
+    now = datetime.now()
+    iso = now.isoformat()
+    win = ACTIVITY_DEDUPE_WINDOW if window is None else window
+    k = key if key is not None else (kind, level, message)
+
+    hit = _activity_index.get(k)
+    if hit is not None and win > 0:
+        ent, ts = hit
+        if (now.timestamp() - ts) <= win and ent in activity_logs:
+            ent["count"] += 1
+            ent["time"] = iso
+            ent["message"] = message
+            activity_logs.remove(ent)
+            activity_logs.append(ent)
+            _activity_index[k] = (ent, now.timestamp())
+            return
+
+    _activity_seq += 1
+    ent = {
+        "id": _activity_seq, "kind": kind, "level": level, "message": message,
+        "time": iso, "first_time": iso, "count": 1,
+    }
+    if meta:
+        ent["meta"] = meta
+    activity_logs.append(ent)
+    _activity_index[k] = (ent, now.timestamp())
+    if len(_activity_index) > 1500:
+        for kk in [kk for kk, (e, _t) in _activity_index.items() if e not in activity_logs][:800]:
+            _activity_index.pop(kk, None)
+
+def log_connection(uid: str, label: str, ip: str, *, rejected: bool = False):
+    """
+    Connection events are very repetitive (every reconnect of every client).
+    One entry per IP+config is kept and its counter is incremented instead.
+    """
+    if rejected:
+        log_activity(
+            "connection",
+            f"اتصال {ip} به کانفیگ «{label}» رد شد (محدودیت تعداد آی‌پی)", "warn",
+            key=("conn-rej", uid, ip), window=600, meta={"ip": ip, "label": label},
+        )
+    else:
+        log_activity(
+            "connection",
+            f"اتصال جدید از {ip} (کانفیگ {label})", "info",
+            key=("conn", uid, ip), window=CONNECTION_LOG_COOLDOWN, meta={"ip": ip, "label": label},
+        )
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 SESSION_COOKIE = "gateway_session"
@@ -929,6 +1146,8 @@ async def ensure_default_link():
                     "label": "VIP-config",
                     "limit_bytes": 0,
                     "used_bytes": 0,
+                    "up_bytes": 0,
+                    "down_bytes": 0,
                     "created_at": datetime.now().isoformat(),
                     "active": True,
                     "expires_at": None,
@@ -1279,6 +1498,7 @@ async def get_stats(_=Depends(require_auth)):
         "timestamp": datetime.now().isoformat(),
         "hourly": dict(hourly_traffic),
         "recent_errors": list(error_logs)[-10:],
+        "unique_errors": len(error_logs),
         "links_count": len(snap),
         "active_links": sum(1 for l in snap.values() if is_link_allowed(l)),
         "expired_links": sum(1 for l in snap.values() if is_link_expired(l)),
@@ -1386,7 +1606,23 @@ async def get_system(_=Depends(require_auth)):
 
 @app.get("/api/activity")
 async def get_activity(_=Depends(require_auth)):
-    return {"logs": list(activity_logs)[-150:]}
+    return {"logs": list(activity_logs)[-500:]}
+
+@app.post("/api/activity/clear")
+async def clear_activity(_=Depends(require_auth)):
+    activity_logs.clear()
+    _activity_index.clear()
+    return {"ok": True}
+
+@app.get("/api/errors")
+async def get_errors(_=Depends(require_auth)):
+    return {"errors": list(error_logs), "total_errors": stats["total_errors"]}
+
+@app.post("/api/errors/clear")
+async def clear_errors(_=Depends(require_auth)):
+    error_logs.clear()
+    stats["total_errors"] = 0
+    return {"ok": True}
 
 # ── Live connections (with IP) ────────────────────────────────────────────────
 @app.get("/api/connections")
@@ -1476,6 +1712,8 @@ async def make_link(
             "label": (label or "New Link").strip()[:60] or "New Link",
             "limit_bytes": max(0, limit_bytes),
             "used_bytes": 0,
+                    "up_bytes": 0,
+                    "down_bytes": 0,
             "created_at": datetime.now().isoformat(),
             "active": True,
             "expires_at": expires_at,
@@ -1545,6 +1783,8 @@ async def reset_link_usage(uid: str) -> dict | None:
         if uid not in LINKS:
             return None
         LINKS[uid]["used_bytes"] = 0
+        LINKS[uid]["up_bytes"] = 0
+        LINKS[uid]["down_bytes"] = 0
         link = dict(LINKS[uid])
     log_activity("link", f'Config "{link.get("label", "?")}" usage reset', "info")
     await save_state()
@@ -1713,6 +1953,8 @@ async def update_link(uid: str, request: Request, _=Depends(require_auth)):
             link["note"] = str(body["note"])[:200]
         if "reset_usage" in body and body["reset_usage"]:
             link["used_bytes"] = 0
+            link["up_bytes"] = 0
+            link["down_bytes"] = 0
             log_activity("link", f'Config "{label}" usage reset', "info")
         if "limit_value" in body:
             lv = float(body.get("limit_value") or 0)
@@ -2109,21 +2351,26 @@ async def public_single_data(uuid: str, request: Request):
     allowed = is_link_allowed(link)
     conn_count = sum(1 for c in connections.values() if c.get("uuid") == uuid)
 
-    # Count upload/download bytes separately from connections
-    up_bytes = 0
-    down_bytes = 0
+    # Real, persisted per-direction counters (written by check_and_use in the relays).
+    # up   = client -> server (what the user uploaded)
+    # down = server -> client (what the user downloaded)
     last_online = None
     for c in connections.values():
         if c.get("uuid") == uuid:
-            b = int(c.get("bytes", 0) or 0)
-            # Estimate: 30% upload, 70% download because the raw split is not stored separately
-            up_bytes += int(b * 0.3)
-            down_bytes += int(b * 0.7)
             ca = c.get("connected_at")
             if ca and (last_online is None or ca > last_online):
                 last_online = ca
+    if last_online is None:
+        last_online = link.get("last_online")
 
     used = int(link.get("used_bytes", 0) or 0)
+    up_bytes = int(link.get("up_bytes", 0) or 0)
+    down_bytes = int(link.get("down_bytes", 0) or 0)
+    if up_bytes + down_bytes == 0 and used > 0:
+        # Legacy link created before per-direction tracking existed:
+        # no real split is available, so fall back to an estimate once.
+        up_bytes = int(used * 0.3)
+        down_bytes = used - up_bytes
     limit = int(link.get("limit_bytes", 0) or 0)
     remaining = max(0, limit - used) if limit > 0 else 0
 

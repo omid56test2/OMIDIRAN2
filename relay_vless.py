@@ -20,6 +20,7 @@ from main import (
     is_ip_allowed,
     request_save,
     log_activity,
+    log_connection,
     now_ir,
 )
 from speed_limit import throttle
@@ -60,7 +61,10 @@ async def parse_vless_header(chunk: bytes):
         raise ValueError(f"unknown addr type: {addr_type}")
     return command, address, port, chunk[pos:]
 
-async def check_and_use(uid: str, n: int) -> bool:
+async def check_and_use(uid: str, n: int, direction: str = "") -> bool:
+    # direction: "up" = client -> server (upload), "down" = server -> client (download).
+    # used_bytes stays the quota counter; up_bytes/down_bytes are the real,
+    # persisted per-direction counters shown in the subscription page.
     # Keep the quota/accounting update atomic. This matches the previously
     # working relay behavior and prevents concurrent Android sessions from
     # racing while updating the same link counters.
@@ -70,6 +74,10 @@ async def check_and_use(uid: str, n: int) -> bool:
             return False
 
         link["used_bytes"] += n
+        if direction == "up":
+            link["up_bytes"] = int(link.get("up_bytes", 0) or 0) + n
+        elif direction == "down":
+            link["down_bytes"] = int(link.get("down_bytes", 0) or 0) + n
         stats["total_bytes"] += n
 
         hour_key = now_ir().strftime("%H:00")
@@ -85,7 +93,7 @@ async def relay_ws_to_tcp(ws: WebSocket, writer: asyncio.StreamWriter, conn_id: 
             data = msg.get("bytes") or (msg.get("text") or "").encode()
             if not data:
                 continue
-            if not await check_and_use(uid, len(data)):
+            if not await check_and_use(uid, len(data), "up"):
                 await ws.close(code=1008, reason="quota/disabled/unknown")
                 break
             await throttle(uid, len(data))
@@ -111,7 +119,7 @@ async def relay_tcp_to_ws(ws: WebSocket, reader: asyncio.StreamReader, conn_id: 
             data = await reader.read(RELAY_BUF)
             if not data:
                 break
-            if not await check_and_use(uid, len(data)):
+            if not await check_and_use(uid, len(data), "down"):
                 await ws.close(code=1008, reason="quota/disabled/unknown")
                 break
             await throttle(uid, len(data))
@@ -130,15 +138,15 @@ async def websocket_tunnel(ws: WebSocket, uuid: str):
         link = LINKS.get(uuid)
 
     if not is_link_allowed(link):
-        logger.warning(f"🚫 WS rejected uuid={uuid[:8]}… (not allowed)")
+        logger.debug(f"🚫 WS rejected uuid={uuid[:8]}… (not allowed)")
         await ws.close(code=1008, reason="not authorized")
         return
 
     ip = _ws_client_ip(ws)
 
     if not is_ip_allowed(link, uuid, ip):
-        logger.warning(f"🚫 WS rejected uuid={uuid[:8]}… ip={ip} (ip limit reached)")
-        log_activity("connection", f"اتصال {ip} به کانفیگ «{link.get('label','?')}» رد شد (محدودیت تعداد آی‌پی)", "warn")
+        logger.debug(f"🚫 WS rejected uuid={uuid[:8]}… ip={ip} (ip limit reached)")
+        log_connection(uuid, link.get('label', '?'), ip, rejected=True)
         await ws.close(code=1008, reason="ip limit reached")
         return
 
@@ -150,8 +158,8 @@ async def websocket_tunnel(ws: WebSocket, uuid: str):
         "connected_at": datetime.now().isoformat(),
         "bytes": 0,
     }
-    logger.info(f"✅ WS [{conn_id}] uuid={uuid[:8]}… ip={ip} total={len(connections)}")
-    log_activity("connection", f"اتصال جدید از {ip} (کانفیگ {link.get('label','?')})", "info")
+    logger.debug(f"✅ WS [{conn_id}] uuid={uuid[:8]}… ip={ip} total={len(connections)}")
+    log_connection(uuid, link.get('label', '?'), ip)
     writer = None
 
     try:
@@ -164,13 +172,13 @@ async def websocket_tunnel(ws: WebSocket, uuid: str):
 
         command, address, port, payload = await parse_vless_header(first_chunk)
 
-        if not await check_and_use(uuid, len(first_chunk)):
+        if not await check_and_use(uuid, len(first_chunk), "up"):
             await ws.close(code=1008, reason="quota/disabled")
             return
 
         stats["total_requests"] += 1
         connections[conn_id]["bytes"] += len(first_chunk)
-        logger.info(f"➡️  [{conn_id}] → {address}:{port}")
+        logger.debug(f"➡️  [{conn_id}] → {address}:{port}")
 
         reader, writer = await asyncio.wait_for(
             asyncio.open_connection(address, port),
@@ -204,10 +212,9 @@ async def websocket_tunnel(ws: WebSocket, uuid: str):
         pass
     except asyncio.TimeoutError:
         stats["total_errors"] += 1
-        error_logs.append({"error": "connection timeout", "time": datetime.now().isoformat()})
+        error_logs.append({"error": "connection timeout", "type": "vless", "level": "warn"})
     except Exception as exc:
         stats["total_errors"] += 1
-        error_logs.append({"error": str(exc), "time": datetime.now().isoformat()})
         logger.error(f"WS error [{conn_id}]: {exc}")
     finally:
         if writer:
@@ -217,4 +224,4 @@ async def websocket_tunnel(ws: WebSocket, uuid: str):
             except Exception:
                 pass
         connections.pop(conn_id, None)
-        logger.info(f"🔌 WS closed [{conn_id}] total={len(connections)}")
+        logger.debug(f"🔌 WS closed [{conn_id}] total={len(connections)}")

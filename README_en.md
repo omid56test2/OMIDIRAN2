@@ -347,6 +347,7 @@ Settings
 |---|---|---|
 | `ADMIN_USERNAME` | `omid` | Panel username |
 | `ADMIN_PASSWORD` | Strong value | Panel password |
+| `LOG_LEVEL` | `INFO` (default) | Console verbosity. Per-connection chatter is hidden by default; set `DEBUG` to see every connect/close/target line |
 | `SECRET_KEY` | Long random value | Session and password hashing secret |
 | `DATA_DIR` | `/data` | State and Secret storage path |
 | `TELEGRAM_BOT_TOKEN` | Empty / Token | Telegram bot token |
